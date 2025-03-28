@@ -1,11 +1,19 @@
 import { Database } from "bun:sqlite";
 import { mkdir } from "fs/promises";
+import { randomUUID } from "crypto";
 
 // Ensure the dbs directory exists
 const DB_DIR = "./dbs";
 await mkdir(DB_DIR, { recursive: true });
 
 // Types for our data structures
+export enum RequestStatus {
+  PENDING = "pending",
+  COMPLETED = "completed",
+  FAILED = "failed",
+  BLOCKED = "blocked",
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -23,6 +31,9 @@ export interface Request {
   request_id: string;
   website_url: string;
   profile_id: string;
+  status: RequestStatus;
+  output?: string;
+  error?: string;
   created_at?: string;
 }
 
@@ -41,6 +52,8 @@ export function getUserDatabase(userId: string): Database {
             website_url TEXT NOT NULL,
             profile_id TEXT NOT NULL,
             status TEXT NOT NULL,
+            output TEXT,
+            error TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (profile_id) REFERENCES profile(id)
         )
@@ -120,8 +133,28 @@ export function getProfileWithFields(
 // Request methods
 export function insertRequest(db: Database, request: Request): void {
   db.run(
-    "INSERT INTO requests (request_id, website_url, profile_id) VALUES (?, ?, ?)",
-    [request.request_id, request.website_url, request.profile_id]
+    "INSERT INTO requests (request_id, website_url, profile_id, status, output, error) VALUES (?, ?, ?, ?, ?, ?)",
+    [
+      request.request_id,
+      request.website_url,
+      request.profile_id,
+      request.status,
+      request.output || null,
+      request.error || null,
+    ]
+  );
+}
+
+export function updateRequestStatus(
+  db: Database,
+  requestId: string,
+  status: RequestStatus,
+  output?: string | null,
+  error?: string | null
+): void {
+  db.run(
+    "UPDATE requests SET status = ?, output = ?, error = ? WHERE request_id = ?",
+    [status, output || null, error || null, requestId]
   );
 }
 
@@ -129,6 +162,26 @@ export function getRequest(db: Database, requestId: string): Request | null {
   return db
     .query("SELECT * FROM requests WHERE request_id = ?")
     .get(requestId) as Request | null;
+}
+
+export function getOrCreateDefaultProfile(db: Database): string {
+  // Try to get the first profile
+  const firstProfile = db
+    .query("SELECT id FROM profile LIMIT 1")
+    .get() as Profile | null;
+
+  if (firstProfile) {
+    return firstProfile.id;
+  }
+
+  // If no profile exists, create a new one
+  const defaultProfile: Profile = {
+    id: randomUUID(),
+    name: "Default Profile",
+  };
+
+  insertProfile(db, defaultProfile);
+  return defaultProfile.id;
 }
 
 // Example usage:
@@ -147,7 +200,8 @@ insertProfileField(db, { profile_id: "profile1", field_key: "phone", field_value
 const request: Request = { 
   request_id: "req1", 
   website_url: "https://example.com", 
-  profile_id: "profile1" 
+  profile_id: "profile1",
+  status: "pending"
 };
 insertRequest(db, request);
 

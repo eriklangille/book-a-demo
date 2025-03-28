@@ -1,10 +1,16 @@
 import os
 import sys
+import json
+import argparse
+import asyncio
+from contextlib import redirect_stdout
+
+REDIRECT = redirect_stdout(sys.stderr)
+REDIRECT.__enter__()
 
 from browser_use.browser.context import BrowserContext
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import asyncio
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -12,17 +18,6 @@ from pydantic import BaseModel
 
 from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
-
-browser = Browser(
-	config=BrowserConfig(
-		chrome_instance_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-	),
-)
-
-# Load environment variables
-load_dotenv()
-if not os.getenv('OPENAI_API_KEY'):
-	raise ValueError('OPENAI_API_KEY is not set. Please add it to your environment variables.')
 
 class Field(BaseModel):
 	name: str
@@ -41,6 +36,17 @@ async def open_webpage(browser: BrowserContext, website_url: str):
 	return ActionResult(extracted_content=f'Opened webpage {website_url}', include_in_memory=False)
 
 async def main():
+	browser = Browser(
+		config=BrowserConfig(
+			chrome_instance_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+		),
+	)
+
+	# Load environment variables
+	load_dotenv()
+	if not os.getenv('OPENAI_API_KEY'):
+		raise ValueError('OPENAI_API_KEY is not set. Please add it to your environment variables.')
+
 	async with await browser.new_context() as context:
 		model = ChatOpenAI(model='gpt-4o')
 
@@ -71,7 +77,18 @@ async def main():
 			controller=controller,
 		)
 		await researcher.run()
+  
+async def mainMock(profile: dict):
+		print("Mocking main")
+		REDIRECT.__exit__(None, None, None)
+		print(json.dumps({'requiredFields': ['test']}))
 
 if __name__ == '__main__':
-	asyncio.run(main())
+	# asyncio.run(main())
+
+	parser = argparse.ArgumentParser()
+	parser.add_argument('profile', type=json.loads)
+	args = parser.parse_args()
+
+	asyncio.run(mainMock(args.profile))
 

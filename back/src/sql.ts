@@ -184,6 +184,21 @@ export function getOrCreateDefaultProfile(db: Database): string {
   return defaultProfile.id;
 }
 
+export function getAllProfilesWithFields(
+  db: Database
+): Array<Profile & { fields: ProfileField[] }> {
+  // Get all profiles
+  const profiles = db.query("SELECT * FROM profile").all() as Profile[];
+
+  // Get fields for each profile
+  return profiles.map((profile) => ({
+    ...profile,
+    fields: db
+      .query("SELECT * FROM profile_fields WHERE profile_id = ?")
+      .all(profile.id) as ProfileField[],
+  }));
+}
+
 // Example usage:
 /*
 const db = getUserDatabase("user123");

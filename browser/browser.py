@@ -84,8 +84,6 @@ async def mainMock(profile: dict):
 		print(json.dumps({'requiredFields': ['test']}))
 
 if __name__ == '__main__':
-	# asyncio.run(main())
-
 	parser = argparse.ArgumentParser()
 	parser.add_argument('profile', type=json.loads)
 	args = parser.parse_args()

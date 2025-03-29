@@ -7,6 +7,7 @@ import {
   updateRequestStatus,
   getOrCreateDefaultProfile,
   getProfileWithFields,
+  getAllProfilesWithFields,
   RequestStatus,
 } from "./sql";
 import { randomUUID } from "crypto";
@@ -226,6 +227,18 @@ const app = new Elysia()
 
     // Return updated profile with fields
     return getProfileWithFields(db, profileId);
+  })
+
+  // Get all profiles for a user
+  .get("/profiles", ({ query }) => {
+    const { user_id } = query;
+
+    if (!user_id) {
+      throw new Error("user_id is required");
+    }
+
+    const db = getUserDatabase(user_id as string);
+    return getAllProfilesWithFields(db);
   })
 
   .listen(3000);

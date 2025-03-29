@@ -1,5 +1,3 @@
-import cors from "@elysiajs/cors";
-import { Elysia, t } from "elysia";
 import {
   getUserDatabase,
   insertRequest,
@@ -7,20 +5,19 @@ import {
   updateRequestStatus,
   getOrCreateDefaultProfile,
   getProfileWithFields,
-  getAllProfilesWithFields,
   RequestStatus,
+  insertProfileField,
 } from "./sql";
-import { randomUUID } from "crypto";
+import { randomUUIDv7, ServerWebSocket } from "bun";
 
 const JOB_TIMEOUT_MS = 60000; // 60 seconds
 
-interface ProcessOutput {
-  requiredFields: string[];
-  error?: string;
-}
-
 // Handle the browser automation job
-async function handleBrowserJob(userId: string, requestId: string) {
+async function handleBrowserJob(
+  userId: string,
+  requestId: string,
+  ws: ServerWebSocket<unknown>
+) {
   const db = getUserDatabase(userId);
 
   try {
@@ -39,10 +36,31 @@ async function handleBrowserJob(userId: string, requestId: string) {
       ["python3", "../browser/browser.py", JSON.stringify(profile)],
       {
         env: { ...process.env },
-        stdout: "pipe",
-        stderr: "pipe",
+        stdout: "pipe", // JSON output
+        stderr: "pipe", // Log output
       }
     );
+
+    let buffer = "";
+    // Iterate over the stdout stream
+    for await (const chunk of proc.stdout) {
+      // Convert chunk (which might be a Buffer) to string
+      buffer += chunk.toString();
+      console.log("buffer", buffer);
+
+      // Split the buffered data by newlines
+      let lines = buffer.split("\n");
+
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || "";
+
+      // Send each complete line
+      for (const line of lines) {
+        if (line.trim()) {
+          ws.send(JSON.stringify({ route: "stdout", body: line }));
+        }
+      }
+    }
 
     const result = (await Promise.race([
       Promise.all([
@@ -105,144 +123,115 @@ async function handleBrowserJob(userId: string, requestId: string) {
   }
 }
 
-const app = new Elysia()
-  .use(cors())
-  .get("/", () => "Hello Elysia")
+const CORS_HEADERS = {
+  headers: {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "OPTIONS, POST",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  },
+};
 
-  // Submit a new request
-  .post(
-    "/request",
-    async ({ body }) => {
-      const { website_url, profile_id, user_id } = body as {
-        website_url: string;
-        profile_id?: string | null;
-        user_id: string;
-      };
-      console.log("body", body);
-      const request_id = randomUUID();
+type WebSocketData = {
+  sessionId: string;
+};
 
-      const db = getUserDatabase(user_id);
+type WebSocketMessage = {
+  route: string;
+  body: any;
+};
 
-      // Get or create a default profile if none specified
-      const final_profile_id = profile_id || getOrCreateDefaultProfile(db);
+const handlers = {
+  request: requestHandler,
+  fields: fieldsHandler,
+};
 
-      console.log("final_profile_id", final_profile_id);
+function fieldsHandler(ws: ServerWebSocket<unknown>, body: any) {
+  const {
+    profile_id: target_profile_id,
+    field_key,
+    user_id,
+    field_value,
+  } = body as {
+    profile_id: string;
+    field_key: string;
+    user_id: string;
+    field_value: string;
+  };
+  const db = getUserDatabase(user_id);
+  insertProfileField(db, {
+    profile_id: target_profile_id,
+    field_key,
+    field_value,
+  });
+}
 
-      const request = {
-        request_id,
-        website_url,
-        profile_id: final_profile_id,
-        status: RequestStatus.PENDING,
-      };
+function requestHandler(ws: ServerWebSocket<unknown>, body: any) {
+  const { website_url, profile_id, user_id } = body as {
+    website_url: string;
+    profile_id?: string | null;
+    user_id: string;
+  };
+  const request_id = randomUUIDv7();
+  const db = getUserDatabase(user_id);
 
-      insertRequest(db, request);
+  // Get or create a default profile if none specified
+  const final_profile_id = profile_id || getOrCreateDefaultProfile(db);
 
-      // Start async job without waiting for it
-      handleBrowserJob(user_id, request_id).catch((err) => {
-        console.error("Failed to handle browser job:", err);
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error occurred";
-        updateRequestStatus(
-          db,
-          request_id,
-          RequestStatus.FAILED,
-          null,
-          errorMessage
-        );
-      });
+  console.log("final_profile_id", final_profile_id);
 
-      return { request_id, profile_id: final_profile_id };
+  const request = {
+    request_id,
+    website_url,
+    profile_id: final_profile_id,
+    status: RequestStatus.PENDING,
+  };
+
+  insertRequest(db, request);
+
+  // Start async job without waiting for it
+  handleBrowserJob(user_id, request_id, ws).catch((err) => {
+    console.error("Failed to handle browser job:", err);
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
+    updateRequestStatus(
+      db,
+      request_id,
+      RequestStatus.FAILED,
+      null,
+      errorMessage
+    );
+  });
+
+  ws.send(JSON.stringify({ route: "request", body: { request_id } }));
+}
+
+Bun.serve({
+  port: 3000,
+  fetch(req, server) {
+    const sessionId = randomUUIDv7();
+    const cookies = req.cookies;
+    cookies.set("sessionId", sessionId);
+    if (
+      server.upgrade(req, {
+        headers: { ...CORS_HEADERS.headers },
+        data: { sessionId },
+      })
+    ) {
+      console.log(`upgrade ${req.url}`);
+      return;
+    }
+
+    return new Response("Error", CORS_HEADERS);
+  },
+  websocket: {
+    message(ws, message) {
+      const { sessionId } = ws.data as WebSocketData;
+      const { route, body } = JSON.parse(message as string) as WebSocketMessage;
+      console.log("message", message, { sessionId, route });
+      handlers[route as keyof typeof handlers](ws, body);
     },
-    {
-      body: t.Object({
-        website_url: t.String(),
-        profile_id: t.Optional(t.String()),
-        user_id: t.String(),
-      }),
-    }
-  )
-
-  // Get request status
-  .get("/request/:requestId", ({ params, query }) => {
-    const { requestId } = params;
-    const { user_id } = query;
-
-    if (!user_id) {
-      throw new Error("user_id is required");
-    }
-
-    const db = getUserDatabase(user_id as string);
-    const request = getRequest(db, requestId);
-
-    if (!request) {
-      throw new Error("Request not found");
-    }
-
-    return request;
-  })
-
-  // Upsert profile fields
-  .post("/profile/:profileId/fields", async ({ params, body }) => {
-    const { profileId } = params;
-    const { user_id, fields } = body as {
-      user_id: string;
-      fields: Array<{ key: string; value: string }>;
-    };
-
-    if (!user_id) {
-      throw new Error("user_id is required");
-    }
-
-    if (!Array.isArray(fields)) {
-      throw new Error("fields must be an array of {key, value} objects");
-    }
-
-    const db = getUserDatabase(user_id);
-
-    // Verify profile exists
-    const profile = getProfileWithFields(db, profileId);
-    if (!profile) {
-      throw new Error("Profile not found");
-    }
-
-    // Upsert each field
-    for (const field of fields) {
-      if (!field.key || !field.value) {
-        throw new Error("Each field must have both key and value");
-      }
-
-      // Try to update first, if no rows affected then insert
-      const result = db.run(
-        "UPDATE profile_fields SET field_value = ? WHERE profile_id = ? AND field_key = ?",
-        [field.value, profileId, field.key]
-      );
-
-      if (result.changes === 0) {
-        db.run(
-          "INSERT INTO profile_fields (profile_id, field_key, field_value) VALUES (?, ?, ?)",
-          [profileId, field.key, field.value]
-        );
-      }
-    }
-
-    // Return updated profile with fields
-    return getProfileWithFields(db, profileId);
-  })
-
-  // Get all profiles for a user
-  .get("/profiles", ({ query }) => {
-    const { user_id } = query;
-
-    if (!user_id) {
-      throw new Error("user_id is required");
-    }
-
-    const db = getUserDatabase(user_id as string);
-    return getAllProfilesWithFields(db);
-  })
-
-  .listen(3000);
-
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+    open(ws) {
+      console.log("open");
+    },
+  },
+});

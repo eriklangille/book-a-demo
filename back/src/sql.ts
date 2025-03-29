@@ -98,7 +98,10 @@ export function getProfile(db: Database, profileId: string): Profile | null {
 // Profile fields methods
 export function insertProfileField(db: Database, field: ProfileField): void {
   db.run(
-    "INSERT INTO profile_fields (profile_id, field_key, field_value) VALUES (?, ?, ?)",
+    `INSERT INTO profile_fields (profile_id, field_key, field_value) 
+     VALUES (?, ?, ?)
+     ON CONFLICT(profile_id, field_key) 
+     DO UPDATE SET field_value = excluded.field_value`,
     [field.profile_id, field.field_key, field.field_value]
   );
 }

@@ -28,10 +28,8 @@ function App() {
 
   // Fetch profiles when sidebar is opened
   useEffect(() => {
-    if (showProfiles) {
       fetchProfiles()
-    }
-  }, [showProfiles])
+  }, [])
 
   // Function to submit a new request
   const submitRequest = async () => {
@@ -182,14 +180,14 @@ function App() {
               {requestId ? 'Processing...' : 'book a demo'}
             </button>
           </div>
-          <div className="flex flex-row justify-center">
+          {profiles.length > 0 && <div className="flex flex-row justify-center">
             <button
               onClick={() => setShowProfiles(!showProfiles)}
               className="p-2 text-black hover:bg-gray-200/30 cursor-pointer rounded-full transition-colors"
             >
               <img src="/chevron-down.svg" alt="Toggle profiles" className={`h-6 w-6 transform transition-transform ${showProfiles ? 'rotate-180' : ''}`} />
             </button>
-          </div>
+          </div>}
 
           {/* Status and Error Display */}
           {error && (
@@ -246,9 +244,20 @@ function App() {
                       {profiles.length > 0 && profiles[0].fields.map((field) => (
                         <div key={field.field_key} className="grid grid-cols-3 gap-2">
                           <div className="text-black border-1 border-black rounded-md p-1">{field.field_key}</div>
-                          <div className="col-span-2 text-black border-1 border-black rounded-md p-1">{field.field_value}</div>
+                          <input
+                            type="text"
+                            value={field.field_value}
+                            className="col-span-2 text-black border-1 border-black focus:border-black focus:ring-2 focus:ring-orange-500 focus:outline-none rounded-md p-1"
+                            onChange={(e) => {
+                              // Handle input change
+                              field.field_value = e.target.value;
+                            }}
+                          />
                         </div>
                       ))}
+                      <button className="text-black border-1 border-black rounded-md p-1 cursor-pointer">
+                        Add Field
+                      </button>
                     </div>
                   </div>
               </div>

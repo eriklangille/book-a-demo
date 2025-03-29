@@ -8,7 +8,7 @@ import {
   RequestStatus,
   insertProfileField,
 } from "./sql";
-import { randomUUIDv7, ServerWebSocket } from "bun";
+import { randomUUIDv7, ServerWebSocket, CookieMap } from "bun";
 
 const JOB_TIMEOUT_MS = 60000; // 60 seconds
 
@@ -41,72 +41,41 @@ async function handleBrowserJob(
       }
     );
 
-    let buffer = "";
-    // Iterate over the stdout stream
+    const decoder = new TextDecoder("utf8", { fatal: false });
+
     for await (const chunk of proc.stdout) {
       // Convert chunk (which might be a Buffer) to string
-      buffer += chunk.toString();
-      console.log("buffer", buffer);
-
-      // Split the buffered data by newlines
-      let lines = buffer.split("\n");
-
-      // Keep the last incomplete line in the buffer
-      buffer = lines.pop() || "";
-
-      // Send each complete line
-      for (const line of lines) {
-        if (line.trim()) {
+      const textChunk = decoder.decode(chunk, { stream: true });
+      const lines = textChunk.split("\n");
+      for (const lineUntrimmed of lines) {
+        const line = lineUntrimmed.trim();
+        console.log("line", line);
+        if (line.startsWith(">>>")) {
+          console.log("sending result");
+          ws.send(
+            JSON.stringify({
+              route: "result",
+              body: JSON.parse(line.split(">>>")[1]),
+            })
+          );
+        } else {
           ws.send(JSON.stringify({ route: "stdout", body: line }));
         }
       }
     }
 
-    const result = (await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
+    const exitCode = await Promise.race([
+      proc.exited,
       new Promise((_, reject) => {
         setTimeout(() => {
           proc.kill();
           reject(new Error("Failed to get required fields: timeout"));
         }, JOB_TIMEOUT_MS);
       }),
-    ])) as [string, string, number];
-
-    const [output, error, exitCode] = result;
+    ]);
 
     if (exitCode !== 0) {
-      throw new Error(`Failed to get required fields: ${error}`);
-    }
-
-    let requiredFields: string[];
-    try {
-      const parsedOutput = JSON.parse(output);
-      if (!parsedOutput.requiredFields) {
-        throw new Error("requiredFields not found in output");
-      }
-      requiredFields = parsedOutput.requiredFields;
-    } catch (err) {
-      throw new Error(`Invalid required fields JSON: ${output}`);
-    }
-
-    // Check if required fields are present
-    const missingFields = requiredFields.filter(
-      (field) => !profile.fields[field]
-    );
-
-    if (missingFields.length > 0) {
-      updateRequestStatus(
-        db,
-        requestId,
-        RequestStatus.BLOCKED,
-        null,
-        `Missing required profile fields: ${missingFields.join(", ")}`
-      );
-      return;
+      throw new Error(`Failed to get required fields: ${exitCode}`);
     }
   } catch (err) {
     // Handle any errors in job execution
@@ -209,11 +178,12 @@ Bun.serve({
   port: 3000,
   fetch(req, server) {
     const sessionId = randomUUIDv7();
-    const cookies = req.cookies;
-    cookies.set("sessionId", sessionId);
     if (
       server.upgrade(req, {
-        headers: { ...CORS_HEADERS.headers },
+        headers: {
+          ...CORS_HEADERS.headers,
+          "Set-Cookie": `sessionId=${sessionId}`,
+        },
         data: { sessionId },
       })
     ) {

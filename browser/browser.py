@@ -5,9 +5,6 @@ import argparse
 import asyncio
 from contextlib import redirect_stdout
 
-REDIRECT = redirect_stdout(sys.stderr)
-REDIRECT.__enter__()
-
 from browser_use.browser.context import BrowserContext
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,6 +23,9 @@ class Fields(BaseModel):
 	fields: list[Field]
 
 controller = Controller()
+
+def output(message: dict):
+	print(f'>>>{json.dumps(message)}')
 
 @controller.registry.action('Webpage: Open a specific webpage')
 async def open_webpage(browser: BrowserContext, website_url: str):
@@ -80,8 +80,7 @@ async def main():
   
 async def mainMock(profile: dict):
 		print("Mocking main")
-		REDIRECT.__exit__(None, None, None)
-		print(json.dumps({'requiredFields': ['test']}))
+		output({'requiredFields': ['email', 'name']})
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()

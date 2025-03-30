@@ -20,12 +20,25 @@ class Field(BaseModel):
 	name: str
 
 class Fields(BaseModel):
-	fields: list[Field]
+	requiredFields: list[Field]
+
+class Result(BaseModel):
+	success: bool
+	demo_scheduled_time: str
+	message: str
 
 controller = Controller()
 
 def output(message: dict):
 	print(f'>>>{json.dumps(message)}')
+
+@controller.action('Output required fields to book a demo', param_model=Fields)
+async def output_required_fields(required_fields: Fields):
+	output(required_fields.model_dump(mode='json'))
+
+@controller.action('Output result of booking a demo', param_model=Result)
+async def output_result(result: Result):
+	output({ 'result': result.model_dump(mode='json')})
 
 @controller.registry.action('Webpage: Open a specific webpage')
 async def open_webpage(browser: BrowserContext, website_url: str):
@@ -35,7 +48,8 @@ async def open_webpage(browser: BrowserContext, website_url: str):
 		await page.wait_for_load_state()
 	return ActionResult(extracted_content=f'Opened webpage {website_url}', include_in_memory=False)
 
-async def main():
+async def main(profile: dict, website_url: str):
+	print(f"Booking demo for {profile} on {website_url}")
 	browser = Browser(
 		config=BrowserConfig(
 			chrome_instance_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -50,42 +64,45 @@ async def main():
 	async with await browser.new_context() as context:
 		model = ChatOpenAI(model='gpt-4o')
 
-		eraser = Agent(
+		opener = Agent(
 			task="""
 				Open the webpage {website_url}
-			""",
+			""".format(website_url=website_url),
 			llm=model,
 			browser_context=context,
 			controller=controller,
 		)
-		await eraser.run()
+		print("Running opener")
+		await opener.run()
 
-		researcher = Agent(
+		booker = Agent(
 			task="""
-				Google to find the full name, nationality, and date of birth of the CEO of the top 10 Fortune 100 companies.
-				For each company, append a row to this existing Google Sheet: https://docs.google.com/spreadsheets/d/1INaIcfpYXlMRWO__de61SHFCaqt1lfHlcvtXZPItlpI/edit
-				Make sure column headers are present and all existing values in the sheet are formatted correctly.
-				Columns:
-					A: Company Name
-					B: CEO Full Name
-					C: CEO Country of Birth
-					D: CEO Date of Birth (YYYY-MM-DD)
-					E: Source URL where the information was found
-			""",
+			  On the current webpage, find and select the button that schedules a product demo.
+				Select the first available demo time.
+				Fill out the required fields with the following profile:
+				{profile}
+
+				If there are any missing required fields, output the required fields and end the execution.
+				Otherwise, output the result of booking a demo.
+			""".format(profile=json.dumps(profile)),
 			llm=model,
 			browser_context=context,
 			controller=controller,
 		)
-		await researcher.run()
+		print("Running booker")
+		await booker.run()
   
-async def mainMock(profile: dict):
-		print("Mocking main")
+async def mainMock(profile: dict, website_url: str):
+		print(f"Mocking {profile}")
 		output({'requiredFields': ['email', 'name']})
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('profile', type=json.loads)
+	parser.add_argument('website_url', type=str)
 	args = parser.parse_args()
 
-	asyncio.run(mainMock(args.profile))
+	print(f"Args: {args}")
+
+	asyncio.run(main(args.profile, args.website_url))
 

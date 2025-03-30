@@ -1,24 +1,56 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 function App() {
-  const [website, setWebsite] = useState('https://revyl.ai')
+  const [website, setWebsite] = useState('http://localhost:8000/test.html')
   const [requestId, setRequestId] = useState(null)
+  const [profileId, setProfileId] = useState(null)
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
   const [requiredFields, setRequiredFields] = useState([])
   const [fieldValues, setFieldValues] = useState({})
   const [ws, setWs] = useState(null)
 
+  const timeoutId = useRef(null);
+
+  // Create a debounced function to send field updates
+  const debouncedSendField = useCallback((field, value) => {
+    if (timeoutId.current) {
+      clearTimeout(timeoutId.current);
+    }
+    timeoutId.current = setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          route: 'fields',
+          body: {
+            profile_id: profileId,
+            field_key: field,
+            user_id: 'test-user',
+            field_value: value
+          }
+        }));
+      }
+    }, 1000);
+  }, [ws, profileId]);
+
   function startWebSocket() {
     const ws = new WebSocket('ws://localhost:3000')
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.route === 'request') {
-        setRequestId(data.body.request_id)
+        if (data.error) {
+          setError(data.error)
+        } else {
+          setRequestId(data.body.request_id)
+          setProfileId(data.body.profile_id)
+        }
       }
       if (data.route === 'result') {
-        setRequiredFields(data.body.requiredFields)
-        setStatus('blocked')
+        if (data.body.result) {
+          setStatus('complete')
+        } else {
+          setRequiredFields(data.body.requiredFields)
+          setStatus('blocked')
+        }
       }
       if (data.route === 'stdout') {
         console.log(data.body)
@@ -39,6 +71,7 @@ function App() {
         route: 'request',
         body: {
           website_url: website,
+          request_id: requestId,
           user_id: 'test-user',
         }
       }))
@@ -50,10 +83,12 @@ function App() {
 
   // Function to handle field value changes
   const handleFieldChange = (field) => (e) => {
+    const newValue = e.target.value;
     setFieldValues(prev => ({
       ...prev,
-      [field]: e.target.value
-    }))
+      [field]: newValue
+    }));
+    debouncedSendField(field, newValue);
   }
 
   return (
@@ -71,7 +106,8 @@ function App() {
                 type="text"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://revyl.ai"
+                // placeholder="https://revyl.ai"
+                placeholder="http://localhost:8000/test.html"
                 className="w-full px-4 py-2 border-1 border-black placeholder:text-gray-400 text-black rounded-md focus:ring-2 focus:ring-orange-500 focus:outline-none transition-all duration-300 hover:shadow-[0_0_15px_rgba(255,151,54,0.3)] focus:shadow-[0_0_20px_rgba(255,151,54,0.5)]"
               />
             </div>

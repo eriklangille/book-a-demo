@@ -10,7 +10,7 @@ import {
 } from "./sql";
 import { randomUUIDv7, ServerWebSocket, CookieMap } from "bun";
 
-const JOB_TIMEOUT_MS = 60000; // 60 seconds
+const JOB_TIMEOUT_MS = 360_000;
 
 // Handle the browser automation job
 async function handleBrowserJob(
@@ -32,12 +32,24 @@ async function handleBrowserJob(
       throw new Error("Profile not found");
     }
 
+    console.log([
+      "python3",
+      "../browser/browser.py",
+      JSON.stringify(profile),
+      request.website_url,
+    ]);
+
     const proc = Bun.spawn(
-      ["python3", "../browser/browser.py", JSON.stringify(profile)],
+      [
+        "python3",
+        "../browser/browser.py",
+        JSON.stringify(profile),
+        request.website_url,
+      ],
       {
         env: { ...process.env },
-        stdout: "pipe", // JSON output
-        stderr: "pipe", // Log output
+        stdout: "pipe",
+        stderr: "pipe",
       }
     );
 
@@ -88,6 +100,7 @@ async function handleBrowserJob(
       null,
       errorMessage
     );
+    ws.send(JSON.stringify({ route: "request", error: errorMessage }));
     console.error("Job execution error:", err);
   }
 }
@@ -135,12 +148,12 @@ function fieldsHandler(ws: ServerWebSocket<unknown>, body: any) {
 }
 
 function requestHandler(ws: ServerWebSocket<unknown>, body: any) {
-  const { website_url, profile_id, user_id } = body as {
+  const { website_url, profile_id, request_id, user_id } = body as {
     website_url: string;
     profile_id?: string | null;
+    request_id?: string | null;
     user_id: string;
   };
-  const request_id = randomUUIDv7();
   const db = getUserDatabase(user_id);
 
   // Get or create a default profile if none specified
@@ -148,30 +161,55 @@ function requestHandler(ws: ServerWebSocket<unknown>, body: any) {
 
   console.log("final_profile_id", final_profile_id);
 
-  const request = {
-    request_id,
-    website_url,
-    profile_id: final_profile_id,
-    status: RequestStatus.PENDING,
-  };
+  const request = request_id
+    ? getRequest(db, request_id)
+    : {
+        request_id: randomUUIDv7(),
+        website_url,
+        profile_id: final_profile_id,
+        status: RequestStatus.PENDING,
+      };
 
-  insertRequest(db, request);
+  if (!request) {
+    ws.send(JSON.stringify({ route: "request", error: "Request not found" }));
+    return;
+  }
+
+  if (!request_id) {
+    insertRequest(db, request);
+  }
 
   // Start async job without waiting for it
-  handleBrowserJob(user_id, request_id, ws).catch((err) => {
+  handleBrowserJob(user_id, request.request_id, ws).catch((err) => {
     console.error("Failed to handle browser job:", err);
+    if (!request_id) {
+      ws.send(
+        JSON.stringify({
+          route: "request",
+          error: err.message || "Unknown error occurred",
+        })
+      );
+    }
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error occurred";
     updateRequestStatus(
       db,
-      request_id,
+      request.request_id,
       RequestStatus.FAILED,
       null,
       errorMessage
     );
   });
 
-  ws.send(JSON.stringify({ route: "request", body: { request_id } }));
+  ws.send(
+    JSON.stringify({
+      route: "request",
+      body: {
+        request_id: request.request_id,
+        profile_id: final_profile_id,
+      },
+    })
+  );
 }
 
 Bun.serve({

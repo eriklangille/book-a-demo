@@ -12,6 +12,12 @@ import { randomUUIDv7, ServerWebSocket } from "bun";
 
 const JOB_TIMEOUT_MS = 360_000;
 
+// Store active processes
+const activeProcesses = new Map<
+  string,
+  { proc: any; ws: ServerWebSocket<unknown> }
+>();
+
 // Handle the browser automation job
 async function handleBrowserJob(
   userId: string,
@@ -34,7 +40,8 @@ async function handleBrowserJob(
 
     const proc = Bun.spawn(
       [
-        "python3",
+        "uv",
+        "run",
         "../browser/browser.py",
         JSON.stringify(profile),
         request.website_url,
@@ -45,6 +52,9 @@ async function handleBrowserJob(
         stderr: "pipe",
       }
     );
+
+    // Store the process reference
+    activeProcesses.set(requestId, { proc, ws });
 
     const decoder = new TextDecoder("utf8", { fatal: false });
 
@@ -80,6 +90,9 @@ async function handleBrowserJob(
       }),
     ]);
 
+    // Clean up the process reference
+    activeProcesses.delete(requestId);
+
     if (exitCode !== 0) {
       // parse stderr
       let stderr = "";
@@ -90,8 +103,20 @@ async function handleBrowserJob(
       throw new Error(
         `An error occurred when starting the browser job: ${stderr}`
       );
+    } else {
+      console.log("Browser job completed successfully");
+      updateRequestStatus(
+        db,
+        requestId,
+        RequestStatus.COMPLETED,
+        null,
+        "Browser job completed successfully"
+      );
     }
   } catch (err) {
+    // Clean up the process reference
+    activeProcesses.delete(requestId);
+
     // Handle any errors in job execution
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error occurred";
@@ -127,6 +152,7 @@ type WebSocketMessage = {
 const handlers = {
   request: requestHandler,
   fields: fieldsHandler,
+  cancel: cancelHandler,
 };
 
 function fieldsHandler(ws: ServerWebSocket<unknown>, body: any) {
@@ -212,6 +238,30 @@ function requestHandler(ws: ServerWebSocket<unknown>, body: any) {
       },
     })
   );
+}
+
+function cancelHandler(ws: ServerWebSocket<unknown>, body: any) {
+  const { request_id, user_id } = body as {
+    request_id: string;
+    user_id: string;
+  };
+  const db = getUserDatabase(user_id);
+
+  const processInfo = activeProcesses.get(request_id);
+  if (processInfo) {
+    processInfo.proc.kill();
+    activeProcesses.delete(request_id);
+    updateRequestStatus(
+      db,
+      request_id,
+      RequestStatus.FAILED,
+      null,
+      "Request cancelled by user"
+    );
+    processInfo.ws.send(
+      JSON.stringify({ route: "request", error: "Request cancelled by user" })
+    );
+  }
 }
 
 Bun.serve({

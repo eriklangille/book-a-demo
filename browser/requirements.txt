@@ -1,0 +1,4 @@
+langchain-openai
+pydantic
+browser-use
+python-dotenv

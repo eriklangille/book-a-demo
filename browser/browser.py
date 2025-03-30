@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "browser-use",
+#     "langchain-openai",
+#     "pydantic",
+#     "python-dotenv",
+# ]
+# ///
 import os
 import sys
 import json
@@ -16,15 +25,15 @@ from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
 
 class Field(BaseModel):
-	name: str
+	field_name: str
 
 class Fields(BaseModel):
 	requiredFields: list[Field]
 
 class Result(BaseModel):
 	success: bool
-	demo_scheduled_time: str
-	message: str
+	scheduled_email: str
+	scheduled_time: str
 
 controller = Controller()
 
@@ -76,14 +85,18 @@ async def main(profile: dict, website_url: str):
 
 		booker = Agent(
 			task="""
-			  On the current webpage, find and select the button that schedules a product demo.
+			  On the {website_url} webpage, find and select the button that schedules a product demo.
 				Select the first available demo time.
-				Fill out the required fields with the following profile:
+				Fill out the appointment with the following profile:
 				{profile}
 
-				If there are any missing required fields, output the required fields and end the execution.
-				Otherwise, output the result of booking a demo.
-			""".format(profile=json.dumps(profile)),
+				If there are any missing fields in the profile that are required to book a demo, use 'Output required fields to book a demo' and end the execution.
+				Do NOT GUESS ANY FIELDS. THIS WILL RESULT IN A FAILED BOOKING. DO NOT USE 'John Doe' or 'test@test.com'. **If you cannot find the required fields**, use 'Output required fields to book a demo'.
+				If there are missing fields and you have outputted the required fields, do NOT book a demo. Instead, end the execution.
+
+				If all required fields are present, use 'Output result of booking a demo' BEFORE ending the execution once the demo has been booked. Without using the 'Output result of booking a demo' action,
+				the user will not know that the demo has been booked.
+			""".format(profile=json.dumps(profile), website_url=website_url),
 			llm=model,
 			browser_context=context,
 			controller=controller,
@@ -92,11 +105,11 @@ async def main(profile: dict, website_url: str):
 		await booker.run()
   
 async def mainMock(profile: dict, website_url: str):
-	for _ in range(10):
+	for _ in range(5):
 		print(f"Mocking {profile} on {website_url}", flush=True)
 		await asyncio.sleep(1)
-	# output({'requiredFields': ['email', 'name']})
-	output({'result': {'success': True, 'demo_scheduled_time': '2025-03-30 10:00:00', 'message': 'Demo scheduled for 2025-03-30 10:00:00'}})
+	output({'requiredFields': [{'field_name': 'email'}, {'field_name': 'name'}]})
+	# output({'result': {'success': True, 'demo_scheduled_time': '2025-03-30 10:00:00', 'message': 'Demo scheduled for 2025-03-30 10:00:00'}})
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()

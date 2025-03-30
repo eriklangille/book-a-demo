@@ -17,6 +17,22 @@ function App() {
 
   const timeoutId = useRef(null);
 
+  // Function to cancel the current request
+  const cancelRequest = () => {
+    if (ws && ws.readyState === WebSocket.OPEN && requestId) {
+      ws.send(JSON.stringify({
+        route: 'cancel',
+        body: {
+          request_id: requestId,
+          user_id: 'test-user'
+        }
+      }));
+      setStatus(null);
+      setRequestId(null);
+      setError(null);
+    }
+  };
+
   // Create a debounced function to send field updates
   const debouncedSendField = useCallback((field, value) => {
     if (timeoutId.current) {
@@ -85,8 +101,8 @@ function App() {
     if (status === 'complete') return;
     if (requiredFields.length > 0) {
       for (const field of requiredFields) {
-        if (!fieldValues[field]) {
-          setError(`Please fill in ${field}`)
+        if (!fieldValues[field.field_name]) {
+          setError(`Please fill in ${field.field_name}`)
           return
         }
       }
@@ -137,14 +153,14 @@ function App() {
               />
             </div>
             <button
-              onClick={submitRequest}
-              disabled={status === 'pending' || status === 'complete'}
+              onClick={status === 'pending' ? cancelRequest : submitRequest}
+              disabled={status === 'complete'}
               className="w-32 cursor-pointer py-2 px-2 bg-gradient-to-r from-red-500 via-orange-500 to-red-500 text-white font-semibold rounded-md shadow-lg hover:shadow-[0_0_20px_rgba(247,151,54,0.5)] transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(() => {
                 switch(status) {
                   case 'pending':
-                    return 'Processing...';
+                    return 'Cancel';
                   case 'blocked':
                     return 'Resubmit';
                   case 'complete':
@@ -209,12 +225,12 @@ function App() {
                 {activeTab === 'fields' && requiredFields.length > 0 && (
                   <div className="space-y-3">
                     {requiredFields.map((field) => (
-                      <div key={field}>
-                        <label className="block text-black text-md mb-1">{field}</label>
+                      <div key={field.field_name}>
+                        <label className="block text-black text-md mb-1">{field.field_name}</label>
                         <input
                           type="text"
-                          value={fieldValues[field] || ''}
-                          onChange={handleFieldChange(field)}
+                          value={fieldValues[field.field_name] || ''}
+                          onChange={handleFieldChange(field.field_name)}
                           className="w-full px-4 py-2 text-black rounded-md border-1 border-black focus:ring-2 focus:ring-orange-500 focus-visible:ring-2 focus-visible:outline-none focus:outline-none"
                         />
                       </div>
@@ -232,9 +248,9 @@ function App() {
                           <span>{result.success ? "Success" : "Failed"}</span>
                         </div>
                         <span>Scheduled Time</span>
-                        <span>{result.demo_scheduled_time}</span>
-                        <span>Message</span>
-                        <span>{result.message}</span>
+                        <span>{result.scheduled_time}</span>
+                        <span>Scheduled Email</span>
+                        <span>{result.scheduled_email}</span>
                       </div>
                     </div>
                   </div>

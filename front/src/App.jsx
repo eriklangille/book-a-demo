@@ -12,10 +12,23 @@ function App() {
   const [stdoutMessages, setStdoutMessages] = useState([])
   const [activeTab, setActiveTab] = useState('logging')
   const [result, setResult] = useState(null)
+  const [userId, setUserId] = useState(null)
   const stdoutRef = useRef(null)
   const messagesRef = useRef([])
 
   const timeoutId = useRef(null);
+
+  // Check for user_id query parameter on initial load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryUserId = params.get('user_id');
+    if (!queryUserId) {
+      setError('Please provide a valid user_id in the URL query parameters');
+      return;
+    }
+    setUserId(queryUserId);
+    startWebSocket();
+  }, []);
 
   // Function to cancel the current request
   const cancelRequest = () => {
@@ -24,7 +37,7 @@ function App() {
         route: 'cancel',
         body: {
           request_id: requestId,
-          user_id: 'test-user'
+          user_id: userId
         }
       }));
       setStatus(null);
@@ -45,13 +58,13 @@ function App() {
           body: {
             profile_id: profileId,
             field_key: field,
-            user_id: 'test-user',
+            user_id: userId,
             field_value: value
           }
         }));
       }
     }, 1000);
-  }, [ws, profileId]);
+  }, [ws, profileId, userId]);
 
   function startWebSocket() {
     const ws = new WebSocket('ws://localhost:3000')
@@ -91,11 +104,6 @@ function App() {
     }
   }, [stdoutMessages]);
 
-  // Fetch profiles when sidebar is opened
-  useEffect(() => {
-      startWebSocket()
-  }, [])
-
   // Function to submit a new request
   const submitRequest = async () => {
     if (status === 'complete') return;
@@ -113,7 +121,7 @@ function App() {
         body: {
           website_url: website,
           request_id: requestId,
-          user_id: 'test-user',
+          user_id: userId,
         }
       }))
       setStatus('pending')

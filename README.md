@@ -29,7 +29,7 @@ in back/
 bun dev
 ```
 
-go to `http://localhost:5173`
+go to `http://localhost:5173?user_id=test-user`
 
 # design
 

@@ -84,7 +84,11 @@ async function handleBrowserJob(
       proc.exited,
       new Promise((_, reject) => {
         setTimeout(() => {
-          proc.kill();
+          const pid = proc.pid;
+          console.log("killing process", pid);
+          proc.kill(0);
+          // kill the process pid through CLI
+          Bun.spawn(["kill", "-9", pid.toString()]);
           reject(new Error("Failed to get required fields: timeout"));
         }, JOB_TIMEOUT_MS);
       }),
@@ -167,7 +171,14 @@ function fieldsHandler(ws: ServerWebSocket<unknown>, body: any) {
     user_id: string;
     field_value: string;
   };
+
+  if (!ALLOWED_USERS.includes(user_id)) {
+    ws.send(JSON.stringify({ route: "request", error: "User not allowed" }));
+    return;
+  }
+
   const db = getUserDatabase(user_id);
+
   insertProfileField(db, {
     profile_id: target_profile_id,
     field_key,
@@ -183,6 +194,11 @@ function requestHandler(ws: ServerWebSocket<unknown>, body: any) {
     user_id: string;
   };
   const db = getUserDatabase(user_id);
+
+  if (!ALLOWED_USERS.includes(user_id)) {
+    ws.send(JSON.stringify({ route: "request", error: "User not allowed" }));
+    return;
+  }
 
   // Get or create a default profile if none specified
   const final_profile_id = profile_id || getOrCreateDefaultProfile(db);
@@ -245,11 +261,22 @@ function cancelHandler(ws: ServerWebSocket<unknown>, body: any) {
     request_id: string;
     user_id: string;
   };
+
+  if (!ALLOWED_USERS.includes(user_id)) {
+    ws.send(JSON.stringify({ route: "request", error: "User not allowed" }));
+    return;
+  }
+
   const db = getUserDatabase(user_id);
 
   const processInfo = activeProcesses.get(request_id);
   if (processInfo) {
-    processInfo.proc.kill();
+    console.log("killing process", request_id);
+    processInfo.proc.kill(0);
+    const pid = processInfo.proc.pid;
+    console.log("killing process", pid);
+    // kill the process pid through CLI
+    Bun.spawn(["kill", "-9", pid.toString()]);
     activeProcesses.delete(request_id);
     updateRequestStatus(
       db,
@@ -263,6 +290,8 @@ function cancelHandler(ws: ServerWebSocket<unknown>, body: any) {
     );
   }
 }
+
+const ALLOWED_USERS = ["test-user", "anam", "scott", "erik"];
 
 Bun.serve({
   port: 3000,

@@ -9,6 +9,10 @@ function App() {
   const [requiredFields, setRequiredFields] = useState([])
   const [fieldValues, setFieldValues] = useState({})
   const [ws, setWs] = useState(null)
+  const [stdoutMessages, setStdoutMessages] = useState([])
+  const [activeTab, setActiveTab] = useState('output')
+  const stdoutRef = useRef(null)
+  const messagesRef = useRef([])
 
   const timeoutId = useRef(null);
 
@@ -49,15 +53,24 @@ function App() {
           setStatus('complete')
         } else {
           setRequiredFields(data.body.requiredFields)
+          setActiveTab('fields')
           setStatus('blocked')
         }
       }
       if (data.route === 'stdout') {
-        console.log(data.body)
+        messagesRef.current = [...messagesRef.current, data.body];
+        setStdoutMessages(messagesRef.current);
       }
     }
     setWs(ws)
   }
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (stdoutRef.current) {
+      stdoutRef.current.scrollTop = stdoutRef.current.scrollHeight;
+    }
+  }, [stdoutMessages]);
 
   // Fetch profiles when sidebar is opened
   useEffect(() => {
@@ -66,6 +79,14 @@ function App() {
 
   // Function to submit a new request
   const submitRequest = async () => {
+    if (requiredFields.length > 0) {
+      for (const field of requiredFields) {
+        if (!fieldValues[field]) {
+          setError(`Please fill in ${field}`)
+          return
+        }
+      }
+    }
     try {
       ws.send(JSON.stringify({
         route: 'request',
@@ -96,7 +117,7 @@ function App() {
       <div className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-[url('/library.png')] flex items-center justify-center">
       <div className="max-w-md w-full p-4 bg-gray-300/20 border-1 border-black backdrop-blur-sm rounded-md shadow-2xl relative z-10">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-black text-left">Let AI book a demo for you</h1>
+          <h1 className="text-2xl font-bold font-[Bodoni_Moda] text-black text-left">Let AI book a demo for you</h1>
         </div>
 
         <div className="space-y-2">
@@ -138,28 +159,82 @@ function App() {
             </div>
           )}
 
-          {status && (
+          {/* {status && (
             <div className="text-white text-sm mt-2">
               Status: {status}
             </div>
-          )}
+          )} */}
 
-          {/* Required Fields Form */}
-          {requiredFields.length > 0 && (
-            <div className="mt-4 p-4 border-1 border-black rounded-md">
-              <h2 className="text-black font-semibold mb-2">Required Fields</h2>
-              <div className="space-y-3">
-                {requiredFields.map((field) => (
-                  <div key={field}>
-                    <label className="block text-black text-md mb-1">{field}</label>
-                    <input
-                      type="text"
-                      value={fieldValues[field] || ''}
-                      onChange={handleFieldChange(field)}
-                      className="w-full px-4 py-2 text-black rounded-md border-1 border-black focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    />
+          {/* Combined Fields and Output Display */}
+          {status && (
+            <div className="h-[290px]">
+              {/* Tabs */}
+              <div className="flex space-x-2 mb-4">
+                {requiredFields.length > 0 && (
+                  <button
+                    onClick={() => setActiveTab('fields')}
+                    className={`cursor-pointer px-4 py-2 text-sm font-semibold transition-colors relative ${
+                      activeTab === 'fields'
+                        ? 'text-black after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-black'
+                        : 'text-gray-800 hover:text-black'
+                    }`}
+                  >
+                    Required Fields
+                  </button>
+                )}
+                <button
+                  onClick={() => setActiveTab('output')}
+                  className={`cursor-pointer px-4 py-2 text-sm font-semibold transition-colors relative ${
+                    activeTab === 'output'
+                      ? 'text-black after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-black'
+                      : 'text-gray-800 hover:text-black'
+                  }`}
+                >
+                  Output
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className={`relative mt-4 p-4 border-1 border-black rounded-md ${activeTab === 'fields' ? 'bg-transparent backdrop-blur-sm' : 'bg-gray-900/50 backdrop-blur-sm'}`}>
+                {activeTab === 'fields' && requiredFields.length > 0 && (
+                  <div className="space-y-3">
+                    {requiredFields.map((field) => (
+                      <div key={field}>
+                        <label className="block text-black text-md mb-1">{field}</label>
+                        <input
+                          type="text"
+                          value={fieldValues[field] || ''}
+                          onChange={handleFieldChange(field)}
+                          className="w-full px-4 py-2 text-black rounded-md border-1 border-black focus:ring-2 focus:ring-orange-500 focus-visible:ring-2 focus-visible:outline-none focus:outline-none"
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {activeTab === 'output' && (
+                  <div 
+                    ref={stdoutRef}
+                    style={{
+                      maxHeight: '200px',
+                      height: '200px',
+                      overflowY: 'auto',
+                      overflowX: 'auto',
+                      willChange: 'transform',
+                      transform: 'translateZ(0)',
+                      scrollBehavior: 'smooth'
+                    }}
+                    key={stdoutMessages.length} // Add a key to force re-render
+                  >
+                    <div className="space-y-1 min-w-max">
+                      {stdoutMessages.map((message, index) => (
+                        <div key={`${index}-${message}`} className="text-white text-xs font-mono whitespace-pre">
+                          {message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

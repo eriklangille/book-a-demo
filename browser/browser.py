@@ -30,7 +30,7 @@ class Result(BaseModel):
 controller = Controller()
 
 def output(message: dict):
-	print(f'>>>{json.dumps(message)}')
+	print(f'>>>{json.dumps(message)}', flush=True)
 
 @controller.action('Output required fields to book a demo', param_model=Fields)
 async def output_required_fields(required_fields: Fields):
@@ -93,8 +93,10 @@ async def main(profile: dict, website_url: str):
 		await booker.run()
   
 async def mainMock(profile: dict, website_url: str):
-		print(f"Mocking {profile}")
-		output({'requiredFields': ['email', 'name']})
+	for _ in range(10):
+		print(f"Mocking {profile} on {website_url}", flush=True)
+		await asyncio.sleep(1)
+	output({'requiredFields': ['email', 'name']})
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -104,5 +106,5 @@ if __name__ == '__main__':
 
 	print(f"Args: {args}")
 
-	asyncio.run(main(args.profile, args.website_url))
+	asyncio.run(mainMock(args.profile, args.website_url))
 

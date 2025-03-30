@@ -61,6 +61,7 @@ async function handleBrowserJob(
       const lines = textChunk.split("\n");
       for (const lineUntrimmed of lines) {
         const line = lineUntrimmed.trim();
+        if (line == "") continue;
         console.log("line", line);
         if (line.startsWith(">>>")) {
           console.log("sending result");

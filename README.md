@@ -8,7 +8,13 @@ get off the couch and touch grass
 
 # how to run this project
 
+in browser/
+
+create a .env and add your OPENAI_API_KEY
+
 two terminals:
+
+`npm i -g bun`
 
 in front/
 

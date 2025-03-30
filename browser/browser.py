@@ -3,7 +3,6 @@ import sys
 import json
 import argparse
 import asyncio
-from contextlib import redirect_stdout
 
 from browser_use.browser.context import BrowserContext
 

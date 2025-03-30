@@ -158,16 +158,10 @@ function App() {
 
           {/* Status and Error Display */}
           {error && (
-            <div className="text-red-500 text-sm mt-2">
-              Error: {error}
+            <div className="bg-red-300/50 border-1 border-black text-black font-mono text-sm mt-2 p-2 rounded">
+              {error}
             </div>
           )}
-
-          {/* {status && (
-            <div className="text-white text-sm mt-2">
-              Status: {status}
-            </div>
-          )} */}
 
           {/* Combined Fields and Logging Display */}
           {status && (

@@ -8,7 +8,7 @@ import {
   RequestStatus,
   insertProfileField,
 } from "./sql";
-import { randomUUIDv7, ServerWebSocket, CookieMap } from "bun";
+import { randomUUIDv7, ServerWebSocket } from "bun";
 
 const JOB_TIMEOUT_MS = 360_000;
 
@@ -31,13 +31,6 @@ async function handleBrowserJob(
     if (!profile) {
       throw new Error("Profile not found");
     }
-
-    console.log([
-      "python3",
-      "../browser/browser.py",
-      JSON.stringify(profile),
-      request.website_url,
-    ]);
 
     const proc = Bun.spawn(
       [
@@ -88,7 +81,15 @@ async function handleBrowserJob(
     ]);
 
     if (exitCode !== 0) {
-      throw new Error(`Failed to get required fields: ${exitCode}`);
+      // parse stderr
+      let stderr = "";
+      for await (const chunk of proc.stderr) {
+        const textChunk = decoder.decode(chunk, { stream: true });
+        stderr += textChunk;
+      }
+      throw new Error(
+        `An error occurred when starting the browser job: ${stderr}`
+      );
     }
   } catch (err) {
     // Handle any errors in job execution

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 function App() {
-  const [website, setWebsite] = useState('http://localhost:8000/test.html')
+  const [website, setWebsite] = useState('https://revyl.ai')
   const [requestId, setRequestId] = useState(null)
   const [profileId, setProfileId] = useState(null)
   const [status, setStatus] = useState(null)
@@ -67,7 +67,7 @@ function App() {
   }, [ws, profileId, userId]);
 
   function startWebSocket() {
-    const ws = new WebSocket('ws://localhost:3000')
+    const ws = new WebSocket(import.meta.env.VITE_BASE_URL)
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.route === 'request') {
@@ -155,8 +155,8 @@ function App() {
                 type="text"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                // placeholder="https://revyl.ai"
-                placeholder="http://localhost:8000/test.html"
+                placeholder="https://revyl.ai"
+                // placeholder="http://localhost:8000/test.html"
                 className="w-full px-4 py-2 border-1 border-black placeholder:text-gray-400 text-black rounded-md focus:ring-2 focus:ring-orange-500 focus:outline-none transition-all duration-300 hover:shadow-[0_0_15px_rgba(255,151,54,0.3)] focus:shadow-[0_0_20px_rgba(255,151,54,0.5)]"
               />
             </div>

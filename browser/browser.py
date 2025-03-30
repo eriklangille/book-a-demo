@@ -24,6 +24,10 @@ from pydantic import BaseModel
 from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
 
+load_dotenv()
+if not os.getenv('OPENAI_API_KEY'):
+	raise ValueError('OPENAI_API_KEY is not set. Please add it to your environment variables.')
+
 class Field(BaseModel):
 	field_name: str
 
@@ -58,16 +62,12 @@ async def open_webpage(browser: BrowserContext, website_url: str):
 
 async def main(profile: dict, website_url: str):
 	print(f"Booking demo for {profile} on {website_url}")
+
 	browser = Browser(
 		config=BrowserConfig(
-			chrome_instance_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+			chrome_instance_path= os.getenv('CHROME_INSTANCE_PATH', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
 		),
 	)
-
-	# Load environment variables
-	load_dotenv()
-	if not os.getenv('OPENAI_API_KEY'):
-		raise ValueError('OPENAI_API_KEY is not set. Please add it to your environment variables.')
 
 	async with await browser.new_context() as context:
 		model = ChatOpenAI(model='gpt-4o')

@@ -96,7 +96,8 @@ async def mainMock(profile: dict, website_url: str):
 	for _ in range(10):
 		print(f"Mocking {profile} on {website_url}", flush=True)
 		await asyncio.sleep(1)
-	output({'requiredFields': ['email', 'name']})
+	# output({'requiredFields': ['email', 'name']})
+	output({'result': {'success': True, 'demo_scheduled_time': '2025-03-30 10:00:00', 'message': 'Demo scheduled for 2025-03-30 10:00:00'}})
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -106,5 +107,5 @@ if __name__ == '__main__':
 
 	print(f"Args: {args}")
 
-	asyncio.run(mainMock(args.profile, args.website_url))
+	asyncio.run(main(args.profile, args.website_url))
 

@@ -10,7 +10,8 @@ function App() {
   const [fieldValues, setFieldValues] = useState({})
   const [ws, setWs] = useState(null)
   const [stdoutMessages, setStdoutMessages] = useState([])
-  const [activeTab, setActiveTab] = useState('output')
+  const [activeTab, setActiveTab] = useState('logging')
+  const [result, setResult] = useState(null)
   const stdoutRef = useRef(null)
   const messagesRef = useRef([])
 
@@ -51,6 +52,8 @@ function App() {
       if (data.route === 'result') {
         if (data.body.result) {
           setStatus('complete')
+          setResult(data.body.result)
+          setActiveTab('result')
         } else {
           setRequiredFields(data.body.requiredFields)
           setActiveTab('fields')
@@ -79,6 +82,7 @@ function App() {
 
   // Function to submit a new request
   const submitRequest = async () => {
+    if (status === 'complete') return;
     if (requiredFields.length > 0) {
       for (const field of requiredFields) {
         if (!fieldValues[field]) {
@@ -115,7 +119,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-900 relative">
       <div className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-[url('/library.png')] flex items-center justify-center">
-      <div className="max-w-md w-full p-4 bg-gray-300/20 border-1 border-black backdrop-blur-sm rounded-md shadow-2xl relative z-10">
+      <div className={`w-md min-w-[300px] p-4 bg-gray-300/20 border-1 border-black backdrop-blur-sm rounded-md shadow-2xl relative z-10 ${status ? 'resize' : ''} overflow-auto`} style={{ minHeight: '150px', minWidth: '380px' }}>
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold font-[Bodoni_Moda] text-black text-left">Let AI book a demo for you</h1>
         </div>
@@ -134,7 +138,7 @@ function App() {
             </div>
             <button
               onClick={submitRequest}
-              disabled={status === 'pending'}
+              disabled={status === 'pending' || status === 'complete'}
               className="w-32 cursor-pointer py-2 px-2 bg-gradient-to-r from-red-500 via-orange-500 to-red-500 text-white font-semibold rounded-md shadow-lg hover:shadow-[0_0_20px_rgba(247,151,54,0.5)] transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(() => {
@@ -165,7 +169,7 @@ function App() {
             </div>
           )} */}
 
-          {/* Combined Fields and Output Display */}
+          {/* Combined Fields and Logging Display */}
           {status && (
             <div className="h-[290px]">
               {/* Tabs */}
@@ -174,7 +178,7 @@ function App() {
                   <button
                     onClick={() => setActiveTab('fields')}
                     className={`cursor-pointer px-4 py-2 text-sm font-semibold transition-colors relative ${
-                      activeTab === 'fields'
+                      activeTab === 'fields' 
                         ? 'text-black after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-black'
                         : 'text-gray-800 hover:text-black'
                     }`}
@@ -182,15 +186,27 @@ function App() {
                     Required Fields
                   </button>
                 )}
+                {result && (
+                  <button
+                    onClick={() => setActiveTab('result')}
+                    className={`cursor-pointer px-4 py-2 text-sm font-semibold transition-colors relative ${
+                      activeTab === 'result'
+                        ? 'text-black after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-black'
+                        : 'text-gray-800 hover:text-black'
+                    }`}
+                  >
+                    Result
+                  </button>
+                )}
                 <button
-                  onClick={() => setActiveTab('output')}
+                  onClick={() => setActiveTab('logging')}
                   className={`cursor-pointer px-4 py-2 text-sm font-semibold transition-colors relative ${
-                    activeTab === 'output'
+                    activeTab === 'logging'
                       ? 'text-black after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-black'
                       : 'text-gray-800 hover:text-black'
                   }`}
                 >
-                  Output
+                  Logging
                 </button>
               </div>
 
@@ -212,18 +228,28 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'output' && (
+                {activeTab === 'result' && result && (
+                  <div className="space-y-3">
+                    <div className="text-white text-md">
+                      <div className="space-y-2 grid grid-cols-[100px_1fr] gap-y-2">
+                        <span>Status</span>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${result.success ? "bg-green-600" : "bg-red-600"}`}></div>
+                          <span>{result.success ? "Success" : "Failed"}</span>
+                        </div>
+                        <span>Scheduled Time</span>
+                        <span>{result.demo_scheduled_time}</span>
+                        <span>Message</span>
+                        <span>{result.message}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'logging' && (
                   <div 
                     ref={stdoutRef}
-                    style={{
-                      maxHeight: '200px',
-                      height: '200px',
-                      overflowY: 'auto',
-                      overflowX: 'auto',
-                      willChange: 'transform',
-                      transform: 'translateZ(0)',
-                      scrollBehavior: 'smooth'
-                    }}
+                    className="min-h-[200px] h-[200px] overflow-y-auto overflow-x-auto will-change-transform transform-translate-z-0 scroll-behavior-smooth"
                     key={stdoutMessages.length} // Add a key to force re-render
                   >
                     <div className="space-y-1 min-w-max">

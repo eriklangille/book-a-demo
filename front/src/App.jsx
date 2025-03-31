@@ -182,7 +182,7 @@ function App() {
 
           {/* Status and Error Display */}
           {error && (
-            <div className="bg-red-300/50 border-1 border-black text-black font-mono text-sm mt-2 p-2 rounded">
+            <div className="bg-red-300/50 max-h-[300px] overflow-auto border-1 border-black text-black font-mono text-sm mt-2 p-2 rounded">
               {error}
             </div>
           )}
